@@ -14,7 +14,6 @@ import scala.scalajs.js
 case class LazyImportSplitRender[Page, View, LazyImport <: Boolean] private (
                                                                               underlying: SplitRender[Page, Signal[Option[View]]]
                                                                             ) extends AnyVal { self =>
-
   import LazyImportSplitRender.SignalWrapper
 
   def dynamicImport: LazyImportSplitRender[Page, View, true] =
@@ -23,15 +22,18 @@ case class LazyImportSplitRender[Page, View, LazyImport <: Boolean] private (
   def staticImport: LazyImportSplitRender[Page, View, false] =
     self.asInstanceOf[LazyImportSplitRender[Page, View, false]]
 
+  inline private def signalWrapper[Render](render: Render): SignalWrapper[Option[Render]] =
+    SignalWrapper[Render, LazyImport](render)
+
   @nowarn
-  inline def collect[P <: Page : ClassTag](inline render: P => View): LazyImportSplitRender[Page, View, LazyImport] = {
-    val wrapper = SignalWrapper[P => View, LazyImport](render)
+  inline def collect[P <: Page: ClassTag](inline render: P => View): LazyImportSplitRender[Page, View, LazyImport] = {
+    val wrapper = signalWrapper(render)
     copy(underlying = underlying.collect[P](p => wrapper.signal.map(r => r.map(_.apply(p)))))
   }
 
   @nowarn
   inline def collectStatic[P <: Page](page: P)(inline view: => View): LazyImportSplitRender[Page, View, LazyImport] = {
-    val wrapper = SignalWrapper[() => View, LazyImport](() => view)
+    val wrapper = signalWrapper(() => view)
     copy(underlying = underlying.collectStatic(page)(wrapper.signal.map(r => r.map(_.apply()))))
   }
 
@@ -39,14 +41,13 @@ case class LazyImportSplitRender[Page, View, LazyImport <: Boolean] private (
   @nowarn
   inline def collectStaticStrict[P <: Page](page: P)(
     inline view: View): LazyImportSplitRender[Page, View, LazyImport] = {
-    val wrapper = SignalWrapper[View, LazyImport](view)
+    val wrapper = signalWrapper(view)
     copy(underlying = underlying.collectStatic(page)(wrapper.signal))
   }
 
   @nowarn
-  inline def collectSignal[P <: Page : ClassTag](
-                                                  inline render: Signal[P] => View): LazyImportSplitRender[Page, View, LazyImport] = {
-    val wrapper = SignalWrapper[Signal[P] => View, LazyImport](render)
+  inline def collectSignal[P <: Page: ClassTag](inline render: Signal[P] => View): LazyImportSplitRender[Page, View, LazyImport] = {
+    val wrapper = signalWrapper(render)
     copy(underlying = underlying.collectSignal[P] { signal =>
       wrapper.signal.map(opt => opt.map(fun => fun(signal)))
     })
